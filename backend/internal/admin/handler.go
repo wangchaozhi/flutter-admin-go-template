@@ -905,8 +905,8 @@ func menuPermissionCode(path string) string {
 		return "system:role"
 	case "/system/menu":
 		return "system:menu"
-	case "/system/app-user":
-		return "system:app-user"
+	case "/mobile/app-user":
+		return "mobile:app-user"
 	default:
 		return ""
 	}

@@ -69,9 +69,12 @@ const emptyMenu: MenuForm = {
 
 const tabs: Array<{ key: Entity; label: string; icon: typeof Users }> = [
   { key: 'users', label: '用户', icon: Users },
-  { key: 'app-users', label: 'App用户', icon: Smartphone },
   { key: 'roles', label: '角色', icon: Shield },
   { key: 'menus', label: '菜单', icon: MenuIcon },
+]
+
+const mobileTabs: Array<{ key: Entity; label: string; icon: typeof Users }> = [
+  { key: 'app-users', label: 'App用户', icon: Users },
 ]
 
 const adminRememberKey = 'admin.remember'
@@ -355,12 +358,33 @@ function AdminDashboard({
     () =>
       tabs
         .filter((tab) => tab.key !== 'users' || menuPaths.has('/system/user'))
-        .filter((tab) => tab.key !== 'app-users' || menuPaths.has('/system/app-user'))
         .filter((tab) => tab.key !== 'roles' || menuPaths.has('/system/role'))
         .filter((tab) => tab.key !== 'menus' || menuPaths.has('/system/menu')),
     [menuPaths],
   )
+  const visibleMobileTabs = useMemo(
+    () =>
+      mobileTabs.filter(
+        (tab) =>
+          tab.key !== 'app-users' ||
+          menuPaths.has('/mobile/app-user') ||
+          menuPaths.has('/system/app-user'),
+      ),
+    [menuPaths],
+  )
+  const visibleEntities = useMemo(
+    () => new Set([...visibleTabs, ...visibleMobileTabs].map((tab) => tab.key)),
+    [visibleTabs, visibleMobileTabs],
+  )
   const can = (permission: string) => permissions.has(permission)
+
+  useEffect(() => {
+    if (visibleEntities.has(active)) return
+    const nextActive = [...visibleTabs, ...visibleMobileTabs][0]?.key
+    if (nextActive) {
+      setActive(nextActive)
+    }
+  }, [active, visibleEntities, visibleTabs, visibleMobileTabs])
 
   async function loadAll() {
     setLoading(true)
@@ -635,6 +659,31 @@ function AdminDashboard({
               </button>
             )
           })}
+          {visibleMobileTabs.length > 0 && (
+            <div className="nav-group">
+              <div className="nav-group-title">
+                <Smartphone size={16} />
+                <span>移动端管理</span>
+              </div>
+              <div className="nav-group-items">
+                {visibleMobileTabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      className={active === tab.key ? 'active' : ''}
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setActive(tab.key)}
+                    >
+                      <Icon size={16} />
+                      <span>{tab.label}</span>
+                      <ChevronRight className="nav-chevron" size={15} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </nav>
       </aside>
 

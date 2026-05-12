@@ -113,7 +113,8 @@ DELETE /api/admin/app-users/{id}
 
 新增 Admin 菜单：
 
-- `app-user`，路径 `/system/app-user`。
+- `移动端管理`，路径 `/mobile`。
+- `App用户`，路径 `/mobile/app-user`，作为 `移动端管理` 的子菜单。
 
 新增按钮权限：
 

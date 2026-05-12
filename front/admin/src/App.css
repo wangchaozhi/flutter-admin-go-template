@@ -199,6 +199,41 @@ button:disabled {
   text-align: left;
 }
 
+.nav-group {
+  display: grid;
+  gap: 4px;
+}
+
+.nav-group-title {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nav-group-items {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+
+.nav-group-items button {
+  position: relative;
+}
+
+.nav-group-items button::before {
+  position: absolute;
+  left: -9px;
+  width: 1px;
+  height: 20px;
+  content: '';
+  background: var(--border-strong);
+}
+
 .nav-tabs button:hover,
 .nav-tabs button.active {
   color: var(--text);
