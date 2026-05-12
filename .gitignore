@@ -2,3 +2,6 @@
 .vscode/
 .DS_Store
 data/
+
+# GoLand / delve 调试产物
+**/__debug_bin*
