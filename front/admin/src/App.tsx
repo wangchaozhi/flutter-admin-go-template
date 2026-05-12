@@ -13,12 +13,15 @@ import {
   RefreshCw,
   Shield,
   Sun,
+  Smartphone,
   Users,
 } from 'lucide-react'
 import './App.css'
 
 import type {
   AdminSession,
+  AppUser,
+  AppUserForm,
   ApiResponse,
   ConfirmDialogState,
   Entity,
@@ -35,13 +38,19 @@ import type {
 import { ConfirmDialog } from './components/confirm'
 import { MenuManagementSection, buildMenuTree } from './features/menus'
 import { RoleManagementSection } from './features/roles'
-import { UserManagementSection } from './features/users'
+import { AppUserManagementSection, UserManagementSection } from './features/users'
 
 const emptyUser: UserForm = {
   username: '',
   nickname: '',
   password: '',
   roleIds: [],
+}
+
+const emptyAppUser: AppUserForm = {
+  username: '',
+  nickname: '',
+  password: '',
 }
 
 const emptyRole: RoleForm = {
@@ -60,6 +69,7 @@ const emptyMenu: MenuForm = {
 
 const tabs: Array<{ key: Entity; label: string; icon: typeof Users }> = [
   { key: 'users', label: '用户', icon: Users },
+  { key: 'app-users', label: 'App用户', icon: Smartphone },
   { key: 'roles', label: '角色', icon: Shield },
   { key: 'menus', label: '菜单', icon: MenuIcon },
 ]
@@ -311,9 +321,11 @@ function AdminDashboard({
 }) {
   const [active, setActive] = useState<Entity>('users')
   const [users, setUsers] = useState<User[]>([])
+  const [appUsers, setAppUsers] = useState<AppUser[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
   const [userForm, setUserForm] = useState<UserForm>(emptyUser)
+  const [appUserForm, setAppUserForm] = useState<AppUserForm>(emptyAppUser)
   const [roleForm, setRoleForm] = useState<RoleForm>(emptyRole)
   const [menuForm, setMenuForm] = useState<MenuForm>(emptyMenu)
   const [loading, setLoading] = useState(true)
@@ -343,6 +355,7 @@ function AdminDashboard({
     () =>
       tabs
         .filter((tab) => tab.key !== 'users' || menuPaths.has('/system/user'))
+        .filter((tab) => tab.key !== 'app-users' || menuPaths.has('/system/app-user'))
         .filter((tab) => tab.key !== 'roles' || menuPaths.has('/system/role'))
         .filter((tab) => tab.key !== 'menus' || menuPaths.has('/system/menu')),
     [menuPaths],
@@ -353,12 +366,14 @@ function AdminDashboard({
     setLoading(true)
     setError('')
     try {
-      const [nextUsers, nextRoles, nextMenus] = await Promise.all([
+      const [nextUsers, nextAppUsers, nextRoles, nextMenus] = await Promise.all([
         request<User[]>('/api/admin/users'),
+        request<AppUser[]>('/api/admin/app-users'),
         request<Role[]>('/api/admin/roles'),
         request<Menu[]>('/api/admin/menus'),
       ])
       setUsers(nextUsers ?? [])
+      setAppUsers(nextAppUsers ?? [])
       setRoles(nextRoles ?? [])
       setMenus(nextMenus ?? [])
       setNotice('数据已同步')
@@ -465,6 +480,28 @@ function AdminDashboard({
         menuIds: roleForm.menuIds,
       },
       () => setRoleForm(emptyRole),
+    )
+  }
+
+  async function saveAppUser(event: FormEvent) {
+    event.preventDefault()
+    if (!appUserForm.username.trim()) {
+      setError('请输入App用户名')
+      return
+    }
+    if (!appUserForm.id && !appUserForm.password.trim()) {
+      setError('新增App用户需要设置密码')
+      return
+    }
+    await saveRecord(
+      'app-users',
+      appUserForm.id,
+      {
+        username: appUserForm.username.trim(),
+        nickname: appUserForm.nickname.trim(),
+        password: appUserForm.password.trim(),
+      },
+      () => setAppUserForm(emptyAppUser),
     )
   }
 
@@ -669,6 +706,18 @@ function AdminDashboard({
             onUserFormChange={setUserForm}
             onSaveUser={saveUser}
             onDeleteUser={(id) => deleteRecord('users', id)}
+          />
+        )}
+
+        {active === 'app-users' && (
+          <AppUserManagementSection
+            users={appUsers}
+            userForm={appUserForm}
+            saving={saving}
+            can={can}
+            onUserFormChange={setAppUserForm}
+            onSaveUser={saveAppUser}
+            onDeleteUser={(id) => deleteRecord('app-users', id)}
           />
         )}
 

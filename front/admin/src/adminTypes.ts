@@ -1,10 +1,16 @@
-export type Entity = 'users' | 'roles' | 'menus'
+export type Entity = 'users' | 'app-users' | 'roles' | 'menus'
 
 export type User = {
   id: number
   username: string
   nickname: string
   roleIds: number[]
+}
+
+export type AppUser = {
+  id: number
+  username: string
+  nickname: string
 }
 
 export type Role = {
@@ -52,6 +58,7 @@ export type Profile = {
 }
 
 export type UserForm = Omit<User, 'id'> & { id?: number; password: string }
+export type AppUserForm = Omit<AppUser, 'id'> & { id?: number; password: string }
 export type RoleForm = Omit<Role, 'id'> & { id?: number }
 export type MenuForm = Omit<Menu, 'id'> & { id?: number }
 export type ConfirmDialogState = {

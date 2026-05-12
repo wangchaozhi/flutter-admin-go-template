@@ -1,0 +1,23 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+database:
+  dsn: "host=localhost port=5432 user=admin_go password=admin_go_password dbname=flutter_admin_go sslmode=disable TimeZone=Asia/Shanghai"
+minio:
+  endpoint: "localhost:9000"
+  accessKey: "admin_go"
+  secretKey: "admin_go_password"
+  useSSL: false
+  avatarBucket: "admin-avatars"
+cors:
+  allowOrigins:
+    - "*"
+  allowHeaders:
+    - "Content-Type"
+    - "Authorization"
+  allowMethods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"

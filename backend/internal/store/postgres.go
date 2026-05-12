@@ -6,21 +6,15 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
+	"flutter-admin-go/internal/config"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
-
-const defaultDSN = "host=localhost port=5432 user=admin_go password=admin_go_password dbname=flutter_admin_go sslmode=disable TimeZone=Asia/Shanghai"
-const defaultMinIOEndpoint = "localhost:9000"
-const defaultMinIOAccessKey = "admin_go"
-const defaultMinIOSecretKey = "admin_go_password"
-const defaultAvatarBucket = "admin-avatars"
 
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
@@ -104,24 +98,23 @@ func (AdminMenu) TableName() string {
 	return "admin_menus"
 }
 
-type MobileUser struct {
+type AppUser struct {
 	ID       int    `gorm:"primaryKey;column:id"`
 	Username string `gorm:"column:username"`
 	Password string `gorm:"column:password"`
 	Nickname string `gorm:"column:nickname"`
 }
 
-func (MobileUser) TableName() string {
-	return "mobile_users"
+func (AppUser) TableName() string {
+	return "app_users"
 }
 
-func Init(_ string) error {
-	dsn := strings.TrimSpace(os.Getenv("DATABASE_DSN"))
-	if dsn == "" {
-		dsn = defaultDSN
+func Init(database config.DatabaseConfig, minioConfig config.MinIOConfig) error {
+	if database.DSN == "" {
+		return fmt.Errorf("database dsn is required")
 	}
 
-	conn, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	conn, err := gorm.Open(postgres.Open(database.DSN), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("open postgres: %w", err)
 	}
@@ -139,7 +132,7 @@ func Init(_ string) error {
 	if err = migrate(); err != nil {
 		return err
 	}
-	if err = initObjectStore(); err != nil {
+	if err = initObjectStore(minioConfig); err != nil {
 		return err
 	}
 	return nil
@@ -157,16 +150,21 @@ func AvatarBucket() string {
 	return avatarBucket
 }
 
-func initObjectStore() error {
-	endpoint := envOrDefault("MINIO_ENDPOINT", defaultMinIOEndpoint)
-	accessKey := envOrDefault("MINIO_ACCESS_KEY", defaultMinIOAccessKey)
-	secretKey := envOrDefault("MINIO_SECRET_KEY", defaultMinIOSecretKey)
-	avatarBucket = envOrDefault("MINIO_AVATAR_BUCKET", defaultAvatarBucket)
-	useSSL := strings.EqualFold(os.Getenv("MINIO_USE_SSL"), "true")
+func initObjectStore(cfg config.MinIOConfig) error {
+	if cfg.Endpoint == "" {
+		return fmt.Errorf("minio endpoint is required")
+	}
+	if cfg.AccessKey == "" || cfg.SecretKey == "" {
+		return fmt.Errorf("minio credentials are required")
+	}
+	if cfg.AvatarBucket == "" {
+		return fmt.Errorf("minio avatar bucket is required")
+	}
+	avatarBucket = cfg.AvatarBucket
 
-	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: useSSL,
+	client, err := minio.New(cfg.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: cfg.UseSSL,
 	})
 	if err != nil {
 		return fmt.Errorf("create minio client: %w", err)
@@ -184,14 +182,6 @@ func initObjectStore() error {
 	}
 	objectClient = client
 	return nil
-}
-
-func envOrDefault(key, fallback string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	return value
 }
 
 func migrate() error {

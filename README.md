@@ -50,6 +50,17 @@ cd backend
 DATABASE_DSN="host=localhost port=5432 user=admin_go password=admin_go_password dbname=flutter_admin_go sslmode=disable TimeZone=Asia/Shanghai" go run ./cmd/server
 ```
 
+后端配置文件位于 `backend/configs/`，默认加载 `local.yml`。可通过 `APP_ENV` 切换环境：
+
+```bash
+cd backend
+APP_ENV=local go run ./cmd/server
+APP_ENV=dev go run ./cmd/server
+APP_ENV=prod DATABASE_DSN="..." MINIO_ENDPOINT="..." MINIO_ACCESS_KEY="..." MINIO_SECRET_KEY="..." go run ./cmd/server
+```
+
+也可以通过 `CONFIG_FILE` 指定完整配置文件路径。服务本地默认监听 `0.0.0.0:8080`，便于桌面端、Android 模拟器和同网段真机访问。
+
 MinIO 默认信息：
 
 ```text
@@ -136,6 +147,19 @@ flutter run
 user / 123456
 ```
 
+移动端 API 地址支持平台默认值和编译参数覆盖：
+
+```text
+Android 模拟器: http://10.0.2.2:8080
+macOS/iOS/Windows/Linux/Web: http://127.0.0.1:8080
+```
+
+真机调试时传入宿主机局域网 IP：
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8080
+```
+
 ## 后端接口
 
 ```text
@@ -150,6 +174,10 @@ GET    /api/admin/users
 POST   /api/admin/users
 PUT    /api/admin/users/{id}
 DELETE /api/admin/users/{id}
+GET    /api/admin/app-users
+POST   /api/admin/app-users
+PUT    /api/admin/app-users/{id}
+DELETE /api/admin/app-users/{id}
 GET    /api/admin/roles
 POST   /api/admin/roles
 PUT    /api/admin/roles/{id}

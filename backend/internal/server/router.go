@@ -2,13 +2,15 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
 	"flutter-admin-go/internal/admin"
 	"flutter-admin-go/internal/auth"
 	"flutter-admin-go/internal/common"
+	"flutter-admin-go/internal/config"
 )
 
-func NewRouter() http.Handler {
+func NewRouter(cors config.CORSConfig) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/admin/login", auth.AdminLoginHandler)
@@ -20,6 +22,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/api/admin/profile/assets/", admin.ProfileAssetHandler)
 	mux.HandleFunc("/api/admin/users", admin.UsersHandler)
 	mux.HandleFunc("/api/admin/users/", admin.UserByIDHandler)
+	mux.HandleFunc("/api/admin/app-users", admin.AppUsersHandler)
+	mux.HandleFunc("/api/admin/app-users/", admin.AppUserByIDHandler)
 	mux.HandleFunc("/api/admin/roles", admin.RolesHandler)
 	mux.HandleFunc("/api/admin/roles/", admin.RoleByIDHandler)
 	mux.HandleFunc("/api/admin/menus", admin.MenusHandler)
@@ -29,18 +33,35 @@ func NewRouter() http.Handler {
 		common.WriteJSON(w, http.StatusOK, common.APIResponse{Code: 0, Msg: "ok", Data: map[string]string{"status": "up"}})
 	})
 
-	return withCORS(mux)
+	return withCORS(mux, cors)
 }
 
-func withCORS(next http.Handler) http.Handler {
+func withCORS(next http.Handler, cors config.CORSConfig) http.Handler {
+	allowHeaders := strings.Join(cors.AllowHeaders, ", ")
+	allowMethods := strings.Join(cors.AllowMethods, ", ")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		if allowOrigin := resolveAllowedOrigin(cors.AllowOrigins, r.Header.Get("Origin")); allowOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		}
+		w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+		w.Header().Set("Access-Control-Allow-Methods", allowMethods)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func resolveAllowedOrigin(allowed []string, origin string) string {
+	for _, item := range allowed {
+		item = strings.TrimSpace(item)
+		if item == "*" {
+			return "*"
+		}
+		if item != "" && item == origin {
+			return origin
+		}
+	}
+	return ""
 }

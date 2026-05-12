@@ -29,6 +29,12 @@ type User struct {
 	RoleIDs  []int  `json:"roleIds"`
 }
 
+type AppUser struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+}
+
 type Role struct {
 	ID      int    `json:"id"`
 	Name    string `json:"name"`
@@ -50,6 +56,12 @@ type userPayload struct {
 	Password string `json:"password,omitempty"`
 	Nickname string `json:"nickname"`
 	RoleIDs  []int  `json:"roleIds"`
+}
+
+type appUserPayload struct {
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	Nickname string `json:"nickname"`
 }
 
 type rolePayload struct {
@@ -113,6 +125,45 @@ func UserByIDHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		deleteByID(w, "admin_users", id)
+	default:
+		common.WriteJSON(w, http.StatusMethodNotAllowed, common.APIResponse{Code: 405, Msg: "method not allowed"})
+	}
+}
+
+func AppUsersHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		if !authorize(w, r, "") {
+			return
+		}
+		listAppUsers(w)
+	case http.MethodPost:
+		if !authorize(w, r, "app-user:create") {
+			return
+		}
+		createAppUser(w, r)
+	default:
+		common.WriteJSON(w, http.StatusMethodNotAllowed, common.APIResponse{Code: 405, Msg: "method not allowed"})
+	}
+}
+
+func AppUserByIDHandler(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(r.URL.Path, "/api/admin/app-users/")
+	if !ok {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "invalid id"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		if !authorize(w, r, "app-user:edit") {
+			return
+		}
+		updateAppUser(w, r, id)
+	case http.MethodDelete:
+		if !authorize(w, r, "app-user:delete") {
+			return
+		}
+		deleteByID(w, "app_users", id)
 	default:
 		common.WriteJSON(w, http.StatusMethodNotAllowed, common.APIResponse{Code: 405, Msg: "method not allowed"})
 	}
@@ -423,6 +474,70 @@ func updateUser(w http.ResponseWriter, r *http.Request, id int) {
 	common.WriteJSON(w, http.StatusOK, common.APIResponse{Code: 0, Msg: "ok"})
 }
 
+func listAppUsers(w http.ResponseWriter) {
+	var records []store.AppUser
+	if err := store.DB().Order("id ASC").Find(&records).Error; err != nil {
+		common.WriteJSON(w, http.StatusInternalServerError, common.APIResponse{Code: 500, Msg: err.Error()})
+		return
+	}
+
+	result := make([]AppUser, 0, len(records))
+	for _, record := range records {
+		result = append(result, AppUser{
+			ID:       record.ID,
+			Username: record.Username,
+			Nickname: record.Nickname,
+		})
+	}
+	common.WriteJSON(w, http.StatusOK, common.APIResponse{Code: 0, Msg: "ok", Data: result})
+}
+
+func createAppUser(w http.ResponseWriter, r *http.Request) {
+	var req appUserPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "invalid body"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" || req.Password == "" {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "username and password required"})
+		return
+	}
+	record := store.AppUser{
+		Username: strings.TrimSpace(req.Username),
+		Password: req.Password,
+		Nickname: strings.TrimSpace(req.Nickname),
+	}
+	if err := store.DB().Create(&record).Error; err != nil {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: err.Error()})
+		return
+	}
+	common.WriteJSON(w, http.StatusOK, common.APIResponse{Code: 0, Msg: "ok"})
+}
+
+func updateAppUser(w http.ResponseWriter, r *http.Request, id int) {
+	var req appUserPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "invalid body"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "username required"})
+		return
+	}
+	updates := map[string]interface{}{
+		"username": strings.TrimSpace(req.Username),
+		"nickname": strings.TrimSpace(req.Nickname),
+	}
+	if req.Password != "" {
+		updates["password"] = req.Password
+	}
+	if err := store.DB().Model(&store.AppUser{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: err.Error()})
+		return
+	}
+	common.WriteJSON(w, http.StatusOK, common.APIResponse{Code: 0, Msg: "ok"})
+}
+
 func listRoles(w http.ResponseWriter) {
 	var records []store.AdminRole
 	if err := store.DB().Order("id ASC").Find(&records).Error; err != nil {
@@ -574,6 +689,10 @@ func deleteByID(w http.ResponseWriter, table string, id int) {
 			}
 		case "admin_menus":
 			if err := tx.Delete(&store.AdminMenu{}, id).Error; err != nil {
+				return err
+			}
+		case "app_users":
+			if err := tx.Delete(&store.AppUser{}, id).Error; err != nil {
 				return err
 			}
 		default:
@@ -786,6 +905,8 @@ func menuPermissionCode(path string) string {
 		return "system:role"
 	case "/system/menu":
 		return "system:menu"
+	case "/system/app-user":
+		return "system:app-user"
 	default:
 		return ""
 	}
@@ -866,7 +987,7 @@ func MustGetAdminUser(username, password string) (bool, error) {
 }
 
 func MustGetMobileUser(username, password string) (bool, error) {
-	var user store.MobileUser
+	var user store.AppUser
 	err := store.DB().Where("username = ? AND password = ?", username, password).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil

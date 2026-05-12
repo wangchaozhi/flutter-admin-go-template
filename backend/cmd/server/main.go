@@ -4,18 +4,24 @@ import (
 	"log"
 	"net/http"
 
+	"flutter-admin-go/internal/config"
 	"flutter-admin-go/internal/server"
 	"flutter-admin-go/internal/store"
 )
 
 func main() {
-	if err := store.Init(""); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	handler := server.NewRouter()
-	addr := ":8080"
-	log.Printf("server started at http://localhost%s", addr)
+	if err := store.Init(cfg.Database, cfg.MinIO); err != nil {
+		log.Fatal(err)
+	}
+
+	handler := server.NewRouter(cfg.CORS)
+	addr := cfg.Server.Addr()
+	log.Printf("server started env=%s addr=http://%s", cfg.Env, addr)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatal(err)
 	}
