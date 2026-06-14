@@ -9,9 +9,11 @@ minio:
   secretKey: ""
   useSSL: true
   avatarBucket: "admin-avatars"
+auth:
+  jwtSecret: ""
 cors:
   allowOrigins:
-    - "*"
+    - "https://admin.example.com"
   allowHeaders:
     - "Content-Type"
     - "Authorization"

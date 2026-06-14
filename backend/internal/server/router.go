@@ -40,8 +40,12 @@ func withCORS(next http.Handler, cors config.CORSConfig) http.Handler {
 	allowHeaders := strings.Join(cors.AllowHeaders, ", ")
 	allowMethods := strings.Join(cors.AllowMethods, ", ")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if allowOrigin := resolveAllowedOrigin(cors.AllowOrigins, r.Header.Get("Origin")); allowOrigin != "" {
+		origin := r.Header.Get("Origin")
+		if allowOrigin := resolveAllowedOrigin(cors.AllowOrigins, origin); allowOrigin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+			if allowOrigin != "*" {
+				w.Header().Add("Vary", "Origin")
+			}
 		}
 		w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
 		w.Header().Set("Access-Control-Allow-Methods", allowMethods)
@@ -54,6 +58,10 @@ func withCORS(next http.Handler, cors config.CORSConfig) http.Handler {
 }
 
 func resolveAllowedOrigin(allowed []string, origin string) string {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
+		return ""
+	}
 	for _, item := range allowed {
 		item = strings.TrimSpace(item)
 		if item == "*" {
@@ -64,4 +72,8 @@ func resolveAllowedOrigin(allowed []string, origin string) string {
 		}
 	}
 	return ""
+}
+
+func originAllowed(origin string, allowed []string) bool {
+	return resolveAllowedOrigin(allowed, origin) != ""
 }

@@ -18,6 +18,7 @@ type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
 	MinIO    MinIOConfig    `yaml:"minio"`
+	Auth     AuthConfig     `yaml:"auth"`
 	CORS     CORSConfig     `yaml:"cors"`
 }
 
@@ -42,6 +43,10 @@ type CORSConfig struct {
 	AllowOrigins []string `yaml:"allowOrigins"`
 	AllowHeaders []string `yaml:"allowHeaders"`
 	AllowMethods []string `yaml:"allowMethods"`
+}
+
+type AuthConfig struct {
+	JWTSecret string `yaml:"jwtSecret"`
 }
 
 func Load() (Config, error) {
@@ -86,6 +91,9 @@ func defaultConfig(env string) Config {
 			AllowHeaders: []string{"Content-Type", "Authorization"},
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		},
+		Auth: AuthConfig{
+			JWTSecret: "dev_jwt_secret_change_in_prod",
+		},
 	}
 }
 
@@ -116,6 +124,12 @@ func applyEnvOverrides(cfg *Config) {
 	if value := strings.TrimSpace(os.Getenv("MINIO_AVATAR_BUCKET")); value != "" {
 		cfg.MinIO.AvatarBucket = value
 	}
+	if origins := envList("CORS_ALLOWED_ORIGINS"); len(origins) > 0 {
+		cfg.CORS.AllowOrigins = origins
+	}
+	if value := strings.TrimSpace(os.Getenv("JWT_SECRET")); value != "" {
+		cfg.Auth.JWTSecret = value
+	}
 }
 
 func normalize(cfg *Config) {
@@ -134,4 +148,22 @@ func normalize(cfg *Config) {
 	if len(cfg.CORS.AllowMethods) == 0 {
 		cfg.CORS.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	}
+	if strings.TrimSpace(cfg.Auth.JWTSecret) == "" {
+		cfg.Auth.JWTSecret = "dev_jwt_secret_change_in_prod"
+	}
+}
+
+func envList(key string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }

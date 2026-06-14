@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"flutter-admin-go/internal/common"
+	"flutter-admin-go/internal/config"
 	"flutter-admin-go/internal/store"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/minio/minio-go/v7"
 	"gorm.io/gorm"
 	_ "image/png"
@@ -436,9 +438,14 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "username and password required"})
 		return
 	}
+	hashed, err := HashPassword(req.Password)
+	if err != nil {
+		common.WriteJSON(w, http.StatusInternalServerError, common.APIResponse{Code: 500, Msg: "hash password failed"})
+		return
+	}
 	record := store.AdminUser{
 		Username: req.Username,
-		Password: req.Password,
+		Password: hashed,
 		Nickname: req.Nickname,
 		RoleIDs:  store.IntArray(req.RoleIDs),
 	}
@@ -465,7 +472,12 @@ func updateUser(w http.ResponseWriter, r *http.Request, id int) {
 		"role_ids": store.IntArray(req.RoleIDs),
 	}
 	if req.Password != "" {
-		updates["password"] = req.Password
+		hashed, err := HashPassword(req.Password)
+		if err != nil {
+			common.WriteJSON(w, http.StatusInternalServerError, common.APIResponse{Code: 500, Msg: "hash password failed"})
+			return
+		}
+		updates["password"] = hashed
 	}
 	if err := store.DB().Model(&store.AdminUser{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: err.Error()})
@@ -502,9 +514,14 @@ func createAppUser(w http.ResponseWriter, r *http.Request) {
 		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: "username and password required"})
 		return
 	}
+	hashed, err := HashPassword(req.Password)
+	if err != nil {
+		common.WriteJSON(w, http.StatusInternalServerError, common.APIResponse{Code: 500, Msg: "hash password failed"})
+		return
+	}
 	record := store.AppUser{
 		Username: strings.TrimSpace(req.Username),
-		Password: req.Password,
+		Password: hashed,
 		Nickname: strings.TrimSpace(req.Nickname),
 	}
 	if err := store.DB().Create(&record).Error; err != nil {
@@ -529,7 +546,12 @@ func updateAppUser(w http.ResponseWriter, r *http.Request, id int) {
 		"nickname": strings.TrimSpace(req.Nickname),
 	}
 	if req.Password != "" {
-		updates["password"] = req.Password
+		hashed, err := HashPassword(req.Password)
+		if err != nil {
+			common.WriteJSON(w, http.StatusInternalServerError, common.APIResponse{Code: 500, Msg: "hash password failed"})
+			return
+		}
+		updates["password"] = hashed
 	}
 	if err := store.DB().Model(&store.AppUser{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		common.WriteJSON(w, http.StatusBadRequest, common.APIResponse{Code: 400, Msg: err.Error()})
@@ -784,18 +806,61 @@ func normalizeMenuPayload(req *menuPayload) {
 	}
 }
 
-func BuildAdminToken(username string) string {
-	return "admin-token:" + username
+func adminJWTSecret() []byte {
+	cfg, err := config.Load()
+	if err != nil {
+		return []byte("dev_jwt_secret_change_in_prod")
+	}
+	return []byte(cfg.Auth.JWTSecret)
+}
+
+type AdminClaims struct {
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
+func BuildAdminToken(username string) (string, error) {
+	now := time.Now()
+	claims := AdminClaims{
+		Username: username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(12 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Subject:   "admin",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(adminJWTSecret())
+}
+
+func ParseAdminToken(tokenStr string) (*AdminClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &AdminClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return adminJWTSecret(), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	claims, ok := token.Claims.(*AdminClaims)
+	if !ok || claims.Subject != "admin" {
+		return nil, fmt.Errorf("invalid claims")
+	}
+	return claims, nil
 }
 
 func CurrentAdminUsername(r *http.Request) (string, bool) {
 	raw := strings.TrimSpace(r.Header.Get("Authorization"))
-	raw = strings.TrimPrefix(raw, "Bearer ")
-	if strings.HasPrefix(raw, "admin-token:") {
-		username := strings.TrimPrefix(raw, "admin-token:")
-		return username, username != ""
+	raw = strings.TrimSpace(strings.TrimPrefix(raw, "Bearer "))
+	if raw == "" {
+		return "", false
 	}
-	return "", false
+	claims, err := ParseAdminToken(raw)
+	if err != nil {
+		return "", false
+	}
+	return claims.Username, claims.Username != ""
 }
 
 func BuildProfile(username string) (Profile, error) {
@@ -976,24 +1041,73 @@ func sortedKeys(values map[string]bool) []string {
 
 func MustGetAdminUser(username, password string) (bool, error) {
 	var user store.AdminUser
-	err := store.DB().Where("username = ? AND password = ?", username, password).First(&user).Error
+	err := store.DB().Where("username = ?", username).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil
 	}
 	if err != nil {
+		return false, err
+	}
+	return checkPassword(user.Password, password), nil
+}
+
+func MustGetMobileUser(username, password string) (bool, error) {
+	user, err := GetMobileUser(username, password)
+	if err != nil || user == nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func MustGetMobileUser(username, password string) (bool, error) {
+func GetMobileUser(username, password string) (*store.AppUser, error) {
 	var user store.AppUser
-	err := store.DB().Where("username = ? AND password = ?", username, password).First(&user).Error
+	err := store.DB().Where("username = ?", username).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	if !checkPassword(user.Password, password) {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+type MobileClaims struct {
+	UserID   int    `json:"uid"`
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
+func BuildMobileToken(userID int, username string) (string, error) {
+	now := time.Now()
+	claims := MobileClaims{
+		UserID:   userID,
+		Username: username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Subject:   "mobile",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(adminJWTSecret())
+}
+
+func ParseMobileToken(tokenStr string) (*MobileClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &MobileClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return adminJWTSecret(), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	claims, ok := token.Claims.(*MobileClaims)
+	if !ok || claims.Subject != "mobile" {
+		return nil, fmt.Errorf("invalid claims")
+	}
+	return claims, nil
 }

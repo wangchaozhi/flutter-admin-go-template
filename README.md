@@ -60,6 +60,7 @@ APP_ENV=prod DATABASE_DSN="..." MINIO_ENDPOINT="..." MINIO_ACCESS_KEY="..." MINI
 ```
 
 也可以通过 `CONFIG_FILE` 指定完整配置文件路径。服务本地默认监听 `0.0.0.0:8080`，便于桌面端、Android 模拟器和同网段真机访问。
+生产环境务必通过 `JWT_SECRET` 设置强随机密钥，并通过 `CORS_ALLOWED_ORIGINS` 或 `backend/configs/prod.yml` 配置可信前端域名。
 
 MinIO 默认信息：
 
@@ -159,6 +160,14 @@ macOS/iOS/Windows/Linux/Web: http://127.0.0.1:8080
 ```bash
 flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8080
 ```
+
+## 认证与安全
+
+- 管理端和移动端登录均返回签名 JWT，请求时通过 `Authorization: Bearer <token>` 携带。
+- 管理端 token 12 小时过期，移动端 token 30 天过期。
+- 新建或修改密码会使用 bcrypt 哈希存储；登录兼容尚未迁移的旧明文行。
+- 迁移 `012_hash_passwords.sql` 会把默认种子密码 `123456` 转换为 bcrypt 哈希。
+- 生产环境请设置 `JWT_SECRET`，并把 CORS 从本地通配配置改为明确白名单。
 
 ## 后端接口
 
