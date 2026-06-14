@@ -433,7 +433,7 @@ class _RememberPanel extends StatelessWidget {
             ),
             Switch.adaptive(
               value: value,
-              activeColor: const Color(0xFF2563EB),
+              activeThumbColor: const Color(0xFF2563EB),
               onChanged: enabled ? onChanged : null,
             ),
           ],
